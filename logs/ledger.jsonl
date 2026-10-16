@@ -1628,3 +1628,14 @@
 {"run": "2026-09-27T21:29:15", "tag": "dialog: окно плюс факты", "model": "gpt-4o-mini", "prompt": 1533, "completion": 29, "cost": 0.00024735, "seconds": 1.01}
 {"run": "2026-09-27T21:29:15", "tag": "dialog: окно плюс факты", "model": "gpt-4o-mini", "prompt": 561, "completion": 31, "cost": 0.00010275, "seconds": 1.35}
 {"run": "2026-09-27T21:29:15", "tag": "dialog: окно плюс факты", "model": "gpt-4o-mini", "prompt": 1530, "completion": 46, "cost": 0.0002571, "seconds": 1.23}
+{"run": "2026-10-16T18:31:18", "tag": "dialog: окно плюс факты", "model": "gpt-4o-mini", "prompt": 398, "completion": 16, "cost": 6.93e-05, "seconds": 2.27}
+{"run": "2026-10-16T18:31:18", "tag": "dialog: окно плюс факты", "model": "gpt-4o-mini", "prompt": 440, "completion": 25, "cost": 8.1e-05, "seconds": 1.55}
+{"run": "2026-10-16T18:31:18", "tag": "dialog: окно плюс факты", "model": "gpt-4o-mini", "prompt": 1261, "completion": 32, "cost": 0.00020835, "seconds": 1.22}
+{"run": "2026-10-16T18:31:18", "tag": "memory", "model": "gpt-4o-mini", "prompt": 294, "completion": 57, "cost": 7.83e-05, "seconds": 3.15}
+{"run": "2026-10-16T18:31:18", "tag": "embed:memory", "model": "text-embedding-3-small", "prompt": 7, "completion": 0, "cost": 1.4e-07, "seconds": 0.71}
+{"run": "2026-10-16T18:31:18", "tag": "dialog: окно плюс факты", "model": "gpt-4o-mini", "prompt": 414, "completion": 20, "cost": 7.41e-05, "seconds": 1.47}
+{"run": "2026-10-16T18:31:18", "tag": "dialog: окно плюс факты", "model": "gpt-4o-mini", "prompt": 1240, "completion": 42, "cost": 0.0002112, "seconds": 1.15}
+{"run": "2026-10-16T18:31:18", "tag": "dialog: окно плюс факты", "model": "gpt-4o-mini", "prompt": 482, "completion": 33, "cost": 9.21e-05, "seconds": 1.25}
+{"run": "2026-10-16T18:31:18", "tag": "memory", "model": "gpt-4o-mini", "prompt": 353, "completion": 57, "cost": 8.715e-05, "seconds": 1.46}
+{"run": "2026-10-16T18:31:18", "tag": "dialog: окно плюс факты", "model": "gpt-4o-mini", "prompt": 412, "completion": 19, "cost": 7.32e-05, "seconds": 1.12}
+{"run": "2026-10-16T18:31:18", "tag": "dialog: окно плюс факты", "model": "gpt-4o-mini", "prompt": 1270, "completion": 33, "cost": 0.0002103, "seconds": 1.2}

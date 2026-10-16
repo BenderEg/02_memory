@@ -16,10 +16,8 @@ from pymilvus import MilvusClient, DataType, Function, FunctionType
 
 ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
-assert os.getenv("OPENROUTER_API_KEY"), "нет ключа: положите OPENROUTER_API_KEY в .env рядом со скриптом"
 
 EMBED_URL = "https://openrouter.ai/api/v1/embeddings"
-HEADERS = {"Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}", "X-Title": "agents-course-seminar02"}
 EMBED_MODEL, DIM = "openai/text-embedding-3-small", 512
 DATA = ROOT / "data"
 CACHE_PATH = ROOT / "emb_cache.npz"
@@ -75,11 +73,20 @@ class Ledger:
 ledger = Ledger()
 
 
+def headers():
+    # ключ нужен только для запроса к API: импорт, тесты и прогоны по кэшу и сохранённым ответам работают без него
+    key = os.getenv("OPENROUTER_API_KEY")
+    if not key:
+        raise RuntimeError("нет ключа: положите OPENROUTER_API_KEY в .env рядом со скриптом")
+    return {"Authorization": f"Bearer {key}", "X-Title": "agents-course-seminar02"}
+
+
 def post_with_retry(url, body, attempts=5):
     problem = "нет ответа"
+    auth = headers()
     for attempt in range(attempts):
         try:
-            r = requests.post(url, json=body, headers=HEADERS, timeout=120)
+            r = requests.post(url, json=body, headers=auth, timeout=120)
             if r.status_code == 200:
                 return r.json()
             problem = f"HTTP {r.status_code}: {r.text[:200]}"

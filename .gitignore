@@ -5,3 +5,4 @@ __pycache__/
 homework*
 seminar*
 index/
+logs/episodes.jsonl

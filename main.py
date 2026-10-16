@@ -7,7 +7,6 @@
 import re, time, argparse
 from concurrent.futures import ThreadPoolExecutor
 
-import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -16,9 +15,10 @@ from load_index import (DATA, ROOT, KBArgs, KB_SCHEMA, embed_cached, format_hits
 
 CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
 MODELS = {"cheap": "openai/gpt-4o-mini", "mid": "anthropic/claude-haiku-4.5"}
-MODEL_COLORS = {"gpt-4o-mini": "#5436A3", "claude-haiku-4.5": "#1A9E8F"}
-BASELINE_COLOR = "#787882"
+MODEL_COLORS = {"gpt-4o-mini": "#5436A3", "claude-haiku-4.5": "#1A9E8F", "claude-sonnet-4.6": "#F09000"}
+WEEK1_MARKER = "s"  # квадрат: прошлая неделя, круг: эта
 RESULTS = DATA / "eval_results.jsonl"
+WEEK1 = DATA / "week1_baseline.jsonl"  # сильная модель без инструментов и живой поиск из 01_ReAct, собирает import_week1.py
 MONEY_PNG = ROOT / "img" / "money_chart.png"
 
 RAG_SYSTEM = ("Answer the question about 2026 FIFA World Cup matches using only the numbered sources. Cite the source number like [2]. "
@@ -87,10 +87,33 @@ def final_answer(text):
     return m[-1].strip() if m else (text or "").strip()
 
 
+# отказ ищем только в строке FINAL: у прошлой недели в промпте был FINAL: unknown, sonnet отказывалась ещё и по-русски,
+# а Haiku пишет отказ словами: "FINAL: The sources do not contain information about ..."
+REFUSAL = re.compile(r"NOT_FOUND|^unknown\b|unable to|could not|couldn't|cannot|do(es)? not contain|no information|"
+                     r"недоступн|недостаточно|не удалось", re.I)
+# слова без содержания: короткий ответ из одних них ("World Cup") не засчитывается за эталон "1994 FIFA World Cup"
+FILLER = {"of", "in", "on", "at", "by", "to", "for", "and", "match", "world", "cup", "fifa", "2026"}
+
+
+def is_refusal(answer):
+    return bool(REFUSAL.search(final_answer(answer)))
+
+
+def answer_words(text):
+    # U.S. -> united states, goals -> goal (только слова от 4 букв: "is", "gus" не трогаем)
+    text = re.sub(r"\bU\.?S\.?A?\b", "United States", str(text))
+    return [re.sub(r"(?<=\w{3})s$", "", w) for w in norm(text).split()]
+
+
 def is_correct(task, answer):
-    # все слова эталона есть в ответе, порядок и лишние слова не важны: "1,000th FIFA World Cup match" верно для "1,000th World Cup match"
-    gold, got = norm(task["answer"]).split(), set(norm(final_answer(answer)).split())
-    return bool(gold) and all(w in got for w in gold)
+    # верно, если в ответе все слова эталона ("1,000th FIFA World Cup match" для "1,000th World Cup match")
+    # или ответ короче эталона, но все его содержательные слова из эталона ("10" для "10 goals",
+    # "Lincoln Financial Field" для "Lincoln Financial Field, Philadelphia"); порядок не важен
+    if is_refusal(answer):
+        return False
+    gold, got = answer_words(task["answer"]), set(answer_words(final_answer(answer)))
+    core = got - FILLER
+    return bool(gold) and (all(w in got for w in gold) or bool(core) and core <= set(gold))
 
 
 def score(results, tasks):
@@ -98,7 +121,7 @@ def score(results, tasks):
     results["final"] = results["answer"].map(final_answer)
     results["correct"] = [is_correct(by_id[i], a) for i, a in zip(results["id"], results["answer"])]
     results["found"] = [any(is_gold(h, by_id[i]) for h in hits) for i, hits in zip(results["id"], results["hits"])]
-    results["refused"] = results["answer"].str.contains("NOT_FOUND")
+    results["refused"] = results["answer"].map(is_refusal)  # по строке FINAL: "NOT_FOUND ... FINAL: <ответ>" не отказ
     return results
 
 
@@ -122,7 +145,8 @@ def evaluate(key, tasks, workers=8):
 def report(results):
     answerable = results[results["source"] != "unanswerable"]
     g = answerable.groupby(["config", "model"], sort=False)
-    table = g.agg(n=("correct", "size"), accuracy=("correct", "mean"), cost_per_task=("cost", "mean")).reset_index()
+    table = g.agg(n=("correct", "size"), accuracy=("correct", "mean"), cost_per_task=("cost", "mean"),
+                  searches=("searches", "mean")).reset_index()
     table["cost_per_correct"] = table["cost_per_task"] / table["accuracy"].replace(0, float("nan"))
     return table.round(6)
 
@@ -132,21 +156,22 @@ def refusals(results):
     rows = []
     for (config, model), part in results.groupby(["config", "model"], sort=False):
         honest, wrong = part[unanswerable.loc[part.index]], part[~unanswerable.loc[part.index]]
-        rows.append({"config": config, "model": model, "честно отклонил": f"{int(honest['refused'].sum())} / {len(honest)}",
+        # на прошлой неделе вопросов без ответа не было
+        rows.append({"config": config, "model": model,
+                     "честно отклонил": f"{int(honest['refused'].sum())} / {len(honest)}" if len(honest) else "—",
                      "отклонил зря": f"{int(wrong['refused'].sum())} / {len(wrong)}"})
     return pd.DataFrame(rows)
 
 
-def money_chart(table, path=MONEY_PNG, baselines=()):
+def money_chart(table, path=MONEY_PNG):
     fig, ax = plt.subplots(figsize=(8, 4.6))
-    for label, value in baselines:
-        ax.axhline(value * 100, color=BASELINE_COLOR, ls="--", lw=1.2)
-        ax.annotate(label, (0.01, value * 100 + 1.5), xycoords=("axes fraction", "data"), fontsize=8, color=BASELINE_COLOR)
     for _, r in table.iterrows():
-        ax.scatter(r["cost_per_task"] * 100, r["accuracy"] * 100, s=110, color=MODEL_COLORS.get(r["model"], BASELINE_COLOR))
+        ax.scatter(r["cost_per_task"] * 100, r["accuracy"] * 100, s=110, color=MODEL_COLORS[r["model"]],
+                   marker=WEEK1_MARKER if "неделя 1" in r["config"] else "o")
         ax.annotate(f"{r['config']}\n{r['model']}", (r["cost_per_task"] * 100, r["accuracy"] * 100), fontsize=8,
                     xytext=(7, 3), textcoords="offset points")
     ax.set_xscale("log"); ax.set_xlabel("цена вопроса, центы (логарифмическая шкала)"); ax.set_ylabel("доля верных, %")
+    ax.set_xticks([0.01, 0.03, 0.1, 0.3, 1], ["0.01", "0.03", "0.1", "0.3", "1"]); ax.minorticks_off(); ax.set_xlim(0.008, 1.5)
     ax.set_ylim(0, 105); ax.grid(alpha=0.3)
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=150, bbox_inches="tight")
@@ -162,6 +187,8 @@ def piles_of(results, config, model):
 
 def diagnose(results, table):
     # table отсортирована от лучшей конфигурации; если у лучшей кучка пуста, пример берём у следующей
+    # у прошлой недели нет выдачи поиска в трейсах, на кучки её не разложить
+    table = table[~table["config"].str.contains("неделя 1")]
     ranked = list(zip(table["config"], table["model"]))
     counts = pd.DataFrame({f"{c} / {m}": {name: len(p) for name, p in piles_of(results, c, m).items()} for c, m in ranked}).T
     print(f"\nразбор провалов, лучшая конфигурация: {ranked[0][0]} / {ranked[0][1]}\n{counts.to_string()}")
@@ -197,6 +224,12 @@ def collect(tasks, rerun):
     return score(results, tasks)
 
 
+def with_week1(results, tasks):
+    # строки прошлой недели не перезапускаются, только проверяются той же is_correct; в таблице они первыми
+    week1 = pd.read_json(WEEK1, lines=True, dtype={"id": str})
+    return score(pd.concat([week1, results], ignore_index=True), tasks)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--rerun", nargs="*", choices=list(CONFIGS), help="без имён заново все конфигурации, с именами только эти")
@@ -204,15 +237,12 @@ def main():
     answerable, unanswerable = load_jsonl("match_quiz_evaluated.jsonl"), load_jsonl("match_quiz_unanswerable.jsonl")
     log.info("кэш эмбеддингов: %d векторов", load_cache())
     try:
-        results = collect(answerable + unanswerable, args.rerun)
+        tasks = answerable + unanswerable
+        results = with_week1(collect(tasks, args.rerun), tasks)
         table = report(results)
         print(table.to_string(index=False))
         print(refusals(results).to_string(index=False))
-        baselines = [(f"прошлая неделя, агент с живым поиском: {np.mean([t['agent_ok'] for t in answerable]):.0%}",
-                      float(np.mean([t["agent_ok"] for t in answerable]))),
-                     (f"Sonnet без инструментов: {np.mean([t['sonnet_ok'] for t in answerable]):.0%}",
-                      float(np.mean([t["sonnet_ok"] for t in answerable])))]
-        print(f"график: {money_chart(table, baselines=baselines)}")
+        print(f"график: {money_chart(table)}")
         diagnose(results, table.sort_values(["accuracy", "cost_per_task"], ascending=[False, True]))
     finally:
         save_cache()

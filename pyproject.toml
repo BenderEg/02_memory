@@ -11,3 +11,10 @@ dependencies = [
     "python-dotenv>=1.2.3",
     "requests>=2.34.2",
 ]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.4.0",
+    "nbconvert>=7.17.2",
+    "nbformat>=5.11.1",
+]
